@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Secure Sheet Access</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-void: #06060b;
+    --bg-surface: #0d0d16;
+    --bg-input: #1a1a28;
+    --border-dim: #1f1f32;
+    --border-mid: #2c2c44;
+    --border-focus: #5b7ff7;
+    --accent: #5b7ff7;
+    --accent-hover: #7a98fa;
+    --accent-glow: rgba(91,127,247,0.25);
+    --accent-soft: rgba(91,127,247,0.06);
+    --text-1: #eaeaf4;
+    --text-2: #9494b0;
+    --text-3: #5c5c78;
+    --green: #2dd4a0;
+    --green-glow: rgba(45,212,160,0.2);
+    --red: #f0475a;
+    --red-glow: rgba(240,71,90,0.15);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { -webkit-font-smoothing:antialiased; }
+
+  body {
+    font-family:'DM Sans','Noto Sans Thai',sans-serif;
+    background:var(--bg-void); color:var(--text-1);
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+
+  /* ── BG ── */
+  .noise {
+    position:fixed; inset:0; z-index:0; opacity:0.025; pointer-events:none;
+    background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size:200px;
+  }
+  .gbg { position:fixed; inset:0; z-index:0; overflow:hidden; }
+  .orb { position:absolute; border-radius:50%; filter:blur(100px); opacity:0.12; animation:drift 18s ease-in-out infinite alternate; }
+  .o1 { width:600px; height:600px; background:#5b7ff7; top:-200px; right:-100px; }
+  .o2 { width:450px; height:450px; background:#8b5cf6; bottom:-150px; left:-80px; animation-delay:-6s; }
+  .o3 { width:350px; height:350px; background:#0ea5e9; top:40%; left:60%; animation-delay:-12s; opacity:0.08; }
+  @keyframes drift { to { transform:translate(40px,-30px) scale(1.08); } }
+
+  .scanline {
+    position:fixed; top:0; left:0; right:0; height:2px; z-index:1;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    opacity:0.4; animation:scanD 4s ease-in-out infinite;
+  }
+  @keyframes scanD { 0%{top:-2px;opacity:0}10%{opacity:0.4}90%{opacity:0.4}100%{top:100%;opacity:0} }
+
+  /* ── CARD ── */
+  .card {
+    position:relative; z-index:2; width:100%; max-width:420px;
+    background:var(--bg-surface); border:1px solid var(--border-dim);
+    border-radius:22px; padding:44px 36px 36px; margin:16px;
+    box-shadow:0 0 0 1px rgba(255,255,255,0.02),0 40px 80px -20px rgba(0,0,0,0.6);
+    animation:enterC 0.7s cubic-bezier(0.22,1,0.36,1) forwards;
+    opacity:0; transform:translateY(24px) scale(0.98);
+  }
+  @keyframes enterC { to{opacity:1;transform:translateY(0) scale(1)} }
+
+  .topglow {
+    position:absolute; top:-1px; left:50%; transform:translateX(-50%);
+    width:200px; height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    border-radius:2px; opacity:0.8;
+  }
+
+  /* ── HEADER ── */
+  .hdr { text-align:center; margin-bottom:32px; }
+
+  .shield {
+    width:60px; height:60px; margin:0 auto 20px; border-radius:16px; position:relative;
+    background:var(--accent-soft); border:1px solid rgba(91,127,247,0.12);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .shield::after {
+    content:''; position:absolute; inset:-4px; border-radius:20px;
+    border:1px solid rgba(91,127,247,0.06); animation:rp 3s ease-in-out infinite;
+  }
+  @keyframes rp { 0%,100%{opacity:0;transform:scale(1)}50%{opacity:1;transform:scale(1.04)} }
+  .shield svg { width:28px; height:28px; color:var(--accent); }
+
+  .hdr h1 { font-size:21px; font-weight:700; letter-spacing:-0.03em; margin-bottom:6px; }
+  .hdr p { font-size:13.5px; color:var(--text-2); line-height:1.6; }
+
+  .chip {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:7px 14px; margin-bottom:28px;
+    background:rgba(91,127,247,0.04); border:1px solid rgba(91,127,247,0.08);
+    border-radius:100px; font-size:11.5px; color:var(--text-3);
+  }
+  .cdot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green-glow); animation:bk 2s infinite; }
+  @keyframes bk { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+  /* ── FORM ── */
+  .fld { margin-bottom:18px; }
+  .flbl { display:block; font-size:11.5px; font-weight:600; color:var(--text-3); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.08em; }
+  .ibox {
+    display:flex; align-items:center; background:var(--bg-input);
+    border:1.5px solid var(--border-dim); border-radius:12px; transition:all 0.25s;
+  }
+  .ibox:focus-within { border-color:var(--border-focus); box-shadow:0 0 0 3px var(--accent-glow); }
+  .ibox.err { border-color:var(--red); box-shadow:0 0 0 3px var(--red-glow); animation:shk 0.45s; }
+  @keyframes shk { 0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)} }
+  .ibox .ic { padding:0 0 0 14px; display:flex; color:var(--text-3); }
+  .ibox .ic svg { width:17px; height:17px; }
+  .ibox input { flex:1; background:none; border:none; outline:none; padding:13px 14px; font-size:14px; color:var(--text-1); font-family:inherit; }
+  .ibox input::placeholder { color:var(--text-3); }
+
+  .eye { padding:0 12px; cursor:pointer; color:var(--text-3); display:flex; align-items:center; transition:color 0.2s; }
+  .eye:hover { color:var(--text-2); }
+  .eye svg { width:17px; height:17px; }
+
+  .ferr { font-size:12px; color:var(--red); margin-top:6px; display:none; align-items:center; gap:5px; }
+  .ferr.show { display:flex; animation:fu 0.3s; }
+  @keyframes fu { from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)} }
+
+  .arow { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; font-size:12px; color:var(--text-3); }
+  .dots { display:flex; gap:5px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--border-mid); transition:all 0.35s; }
+  .dot.fail { background:var(--red); box-shadow:0 0 6px var(--red-glow); }
+
+  /* ── BTN ── */
+  .btn {
+    width:100%; padding:14px; border:none; border-radius:12px;
+    background:var(--accent); color:#fff; font-size:15px; font-weight:600;
+    font-family:inherit; cursor:pointer; position:relative; overflow:hidden; transition:all 0.3s;
+  }
+  .btn:hover:not(:disabled) { background:var(--accent-hover); box-shadow:0 6px 24px var(--accent-glow); transform:translateY(-1px); }
+  .btn:active:not(:disabled) { transform:translateY(0); }
+  .btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .btn .lb { transition:opacity 0.2s; }
+  .btn.busy .lb { opacity:0; }
+  .btn .ld { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; }
+  .btn.busy .ld { opacity:1; }
+  .spin { width:20px; height:20px; border:2.5px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:sp 0.65s linear infinite; }
+  @keyframes sp { to{transform:rotate(360deg)} }
+
+  /* ── OVERLAYS ── */
+  .ov {
+    position:absolute; inset:0; z-index:10; background:rgba(6,6,11,0.96);
+    border-radius:22px; display:none; flex-direction:column;
+    align-items:center; justify-content:center; padding:40px; text-align:center;
+  }
+  .ov.show { display:flex; animation:fi 0.4s; }
+  @keyframes fi { from{opacity:0}to{opacity:1} }
+
+  .lkc { width:72px; height:72px; border-radius:50%; background:var(--red-glow); margin-bottom:20px; display:flex; align-items:center; justify-content:center; animation:pl 1.8s ease-in-out infinite; }
+  @keyframes pl { 0%,100%{box-shadow:0 0 0 0 var(--red-glow)}50%{box-shadow:0 0 30px 10px var(--red-glow)} }
+  .lkc svg { width:32px; height:32px; color:var(--red); }
+  .ov h2 { font-size:19px; font-weight:700; margin-bottom:8px; }
+  .ov p { font-size:13px; color:var(--text-2); line-height:1.6; margin-bottom:16px; }
+  .tmr { font-family:'IBM Plex Mono',monospace; font-size:30px; font-weight:500; color:var(--red); letter-spacing:0.05em; }
+
+  .chc { width:72px; height:72px; border-radius:50%; background:rgba(45,212,160,0.08); border:2px solid var(--green); margin-bottom:20px; display:flex; align-items:center; justify-content:center; }
+  .chc svg { width:34px; height:34px; color:var(--green); }
+  .dc { stroke-dasharray:50; stroke-dashoffset:50; animation:dw 0.6s 0.3s forwards; }
+  @keyframes dw { to{stroke-dashoffset:0} }
+  .ov .gh { color:var(--green); }
+  .bgo {
+    padding:12px 36px; border:none; border-radius:10px;
+    background:var(--green); color:#fff; font-size:14px; font-weight:600;
+    font-family:inherit; cursor:pointer; transition:all 0.3s; margin-top:8px;
+  }
+  .bgo:hover { box-shadow:0 6px 24px var(--green-glow); transform:translateY(-1px); }
+
+  .lt { margin-top:10px; font-size:10.5px; color:var(--text-3); opacity:0.6; display:flex; align-items:center; gap:4px; justify-content:center; }
+  .lt svg { width:12px; height:12px; }
+
+  .ftr { margin-top:24px; text-align:center; font-size:11px; color:var(--text-3); line-height:1.7; }
+
+  @media(max-width:480px){
+    .card{padding:36px 24px 28px;margin:12px;border-radius:18px}
+    .hdr h1{font-size:18px}
+  }
+</style>
+</head>
+<body>
+
+<div class="noise"></div>
+<div class="gbg"><div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div></div>
+<div class="scanline"></div>
+
+<div class="card">
+  <div class="topglow"></div>
+
+  <!-- LOCKOUT -->
+  <div class="ov" id="lockOv">
+    <div class="lkc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+    <h2>บัญชีถูกล็อคชั่วคราว</h2>
+    <p>ใส่รหัสผิดเกินจำนวนที่กำหนด<br>กรุณารอแล้วลองใหม่อีกครั้ง</p>
+    <div class="tmr" id="tmr">02:00</div>
+  </div>
+
+  <!-- SUCCESS -->
+  <div class="ov" id="okOv">
+    <div class="chc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path class="dc" d="M5 13l4 4L19 7"/></svg></div>
+    <h2 class="gh">ยืนยันตัวตนสำเร็จ!</h2>
+    <p>กำลังนำคุณไปยัง Google Sheet...</p>
+    <button class="bgo" id="btnGo">เปิด Google Sheet</button>
+    <div class="lt">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span id="logT"></span>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="shield"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+    <h1>Secure Sheet Access</h1>
+    <p>ยืนยันตัวตนก่อนเข้าถึงข้อมูล<br>ลิงก์ Sheet จะแสดงหลัง Login สำเร็จเท่านั้น</p>
+  </div>
+
+  <div class="chip"><div class="cdot"></div><span>Server-side Auth &bull; No URL Exposed &bull; Rate Limited</span></div>
+
+  <!-- FORM -->
+  <div class="fld">
+    <label class="flbl">ชื่อผู้ใช้</label>
+    <div class="ibox" id="uBox">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <input type="text" id="uIn" placeholder="กรอกชื่อผู้ใช้" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="ferr" id="uE"><span></span></div>
+  </div>
+
+  <div class="fld">
+    <label class="flbl">รหัสผ่าน</label>
+    <div class="ibox" id="pBox">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div>
+      <input type="password" id="pIn" placeholder="กรอกรหัสผ่าน" autocomplete="off">
+      <div class="eye" id="eyeB"><svg id="eyeI" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+    </div>
+    <div class="ferr" id="pE"><span></span></div>
+  </div>
+
+  <div class="arow">
+    <span>โอกาสที่เหลือ</span>
+    <div class="dots" id="dots"></div>
+  </div>
+
+  <button class="btn" id="btnL">
+    <span class="lb">เข้าสู่ระบบ</span>
+    <div class="ld"><div class="spin"></div></div>
+  </button>
+
+  <div class="ftr">
+    ระบบตรวจสอบผ่าน Server &bull; ลิงก์ Sheet ไม่อยู่ในโค้ดหน้าเว็บ<br>
+    หากลืมรหัสผ่าน กรุณาติดต่อผู้ดูแลระบบ
+  </div>
+</div>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ★ Apps Script Backend URL ★
+// ★ ลิงก์ Sheet จริงไม่อยู่ที่นี่ — อยู่บน Server เท่านั้น ★
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+var API = "https://script.google.com/macros/s/AKfycbxLiHAzeBCBuQ4YKNutlpO8-66JdMAwqPbvx7AQ55hMG8H679fG2nt7TYmhs7cbHsGU/exec";
+
+var MAX = 5, fails = 0, locked = false;
+
+function cid(){
+  var id="";try{id=localStorage.getItem("_cid")}catch(e){}
+  if(!id){id=Math.random().toString(36).substr(2)+Date.now().toString(36);try{localStorage.setItem("_cid",id)}catch(e){}}
+  return id;
+}
+
+function init(){
+  rDots();
+  var u=document.getElementById("uIn"),p=document.getElementById("pIn");
+  p.addEventListener("keydown",function(e){if(e.key==="Enter")go()});
+  u.addEventListener("keydown",function(e){if(e.key==="Enter")p.focus()});
+  u.addEventListener("input",function(){ce("u")});
+  p.addEventListener("input",function(){ce("p")});
+  document.getElementById("eyeB").addEventListener("click",tEye);
+  document.getElementById("btnL").addEventListener("click",go);
+
+  // ป้องกัน inspect
+  document.addEventListener("contextmenu",function(e){e.preventDefault()});
+  document.addEventListener("keydown",function(e){
+    if(e.key==="F12"||(e.ctrlKey&&e.shiftKey&&(e.key==="I"||e.key==="J"||e.key==="C"))||(e.ctrlKey&&e.key==="u"))e.preventDefault();
+  });
+}
+
+function rDots(){
+  var c=document.getElementById("dots");c.innerHTML="";
+  for(var i=0;i<MAX;i++){var d=document.createElement("div");d.className="dot"+(i<fails?" fail":"");c.appendChild(d)}
+}
+
+function se(f,m){
+  document.getElementById(f+"Box").classList.add("err");
+  var el=document.getElementById(f+"E");el.querySelector("span").textContent=m;el.classList.add("show");
+}
+function ce(f){
+  document.getElementById(f+"Box").classList.remove("err");
+  document.getElementById(f+"E").classList.remove("show");
+}
+
+function tEye(){
+  var i=document.getElementById("pIn"),c=document.getElementById("eyeI");
+  if(i.type==="password"){i.type="text";c.innerHTML='<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';}
+  else{i.type="password";c.innerHTML='<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';}
+}
+
+async function go(){
+  if(locked)return;
+  var btn=document.getElementById("btnL");
+  var u=document.getElementById("uIn").value.trim();
+  var p=document.getElementById("pIn").value;
+  ce("u");ce("p");
+  if(!u){se("u","กรุณากรอกชื่อผู้ใช้");return}
+  if(!p){se("p","กรุณากรอกรหัสผ่าน");return}
+
+  btn.classList.add("busy");btn.disabled=true;
+
+  try{
+    var res=await fetch(API,{
+      method:"POST",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({action:"login",username:u,password:p,clientId:cid()}),
+      redirect:"follow"
+    });
+    var data=await res.json();
+    btn.classList.remove("busy");btn.disabled=false;
+
+    if(data.success){
+      document.getElementById("logT").textContent="เข้าสู่ระบบเมื่อ "+new Date().toLocaleTimeString("th-TH");
+      document.getElementById("btnGo").onclick=function(){window.open(data.sheetUrl,"_blank")};
+      document.getElementById("okOv").classList.add("show");
+    }else if(data.locked){
+      doLock(data.remaining);
+    }else{
+      fails++;rDots();
+      se("p",data.message||"ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง");
+    }
+  }catch(err){
+    btn.classList.remove("busy");btn.disabled=false;
+    se("p","เชื่อมต่อ Server ไม่ได้ — ลองใหม่อีกครั้ง");
+    console.error(err);
+  }
+}
+
+function doLock(sec){
+  locked=true;var rem=sec;
+  var ov=document.getElementById("lockOv"),d=document.getElementById("tmr");
+  ov.classList.add("show");
+  function tk(){
+    var m=String(Math.floor(rem/60)).padStart(2,"0");
+    var s=String(rem%60).padStart(2,"0");
+    d.textContent=m+":"+s;
+  }
+  tk();
+  var iv=setInterval(function(){
+    rem--;tk();
+    if(rem<=0){clearInterval(iv);ov.classList.remove("show");locked=false;fails=0;rDots();document.getElementById("uIn").value="";document.getElementById("pIn").value="";}
+  },1000);
+}
+
+init();
+</script>
+</body>
+</html>
